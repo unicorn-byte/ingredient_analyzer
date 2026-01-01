@@ -43,7 +43,9 @@ limiter = Limiter(
 limiter.init_app(app)
 
 # ⚠ Adjust if Tesseract path differs
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+if os.name == "nt":
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
 
 
 # ---------------- MODELS ----------------
