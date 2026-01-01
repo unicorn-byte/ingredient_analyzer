@@ -14,7 +14,7 @@ import os, json, re
 from datetime import datetime
 from dotenv import load_dotenv
 
-# ---------------- OCR (SAFE IMPORT) ----------------
+# ---------------- OPTIONAL OCR (SAFE) ----------------
 try:
     import cv2
     import pytesseract
@@ -28,16 +28,18 @@ from rule_based_analyzer import analyze_ingredients
 # ---------------- CONFIG ----------------
 load_dotenv()
 
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
+
+os.makedirs(INSTANCE_DIR, exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
-
-# ✅ REQUIRED FOR RENDER (SQLite path)
-os.makedirs("instance", exist_ok=True)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/nutriguard.db"
-
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(INSTANCE_DIR, 'nutriguard.db')}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["UPLOAD_FOLDER"] = "static/uploads"
-os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
@@ -45,17 +47,11 @@ bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
-# ✅ REQUIRED FOR RENDER (Limiter memory storage)
 limiter = Limiter(
     key_func=get_remote_address,
-    storage_uri="memory://",
     default_limits=["200 per day", "50 per hour"]
 )
 limiter.init_app(app)
-
-# ✅ Windows-only Tesseract path
-if os.name == "nt" and OCR_AVAILABLE:
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # ---------------- MODELS ----------------
 class User(UserMixin, db.Model):
@@ -66,7 +62,6 @@ class User(UserMixin, db.Model):
 
     age = db.Column(db.Integer)
     gender = db.Column(db.String(20))
-
     dietary_preferences = db.Column(db.Text, default="[]")
     allergies = db.Column(db.Text, default="[]")
     medical_conditions = db.Column(db.Text, default="[]")
@@ -82,8 +77,8 @@ class Analysis(db.Model):
 
     safety_score = db.Column(db.Integer)
     traffic_light = db.Column(db.String(20))
-
     analysis_result = db.Column(db.Text)
+
     input_method = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -92,27 +87,22 @@ class Analysis(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ---------------- DB INIT (RENDER SAFE) ----------------
-with app.app_context():
-    db.create_all()
 
 # ---------------- HELPERS ----------------
 def extract_text_from_image(path):
     if not OCR_AVAILABLE:
         return ""
-    try:
-        img = cv2.imread(path)
-        if img is None:
-            return ""
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        return pytesseract.image_to_string(gray)
-    except Exception:
+    img = cv2.imread(path)
+    if img is None:
         return ""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    return pytesseract.image_to_string(gray)
 
 
 def clean_ingredients(text):
     text = re.sub(r"[^\w\s,]", "", text)
     return [i.strip() for i in text.split(",") if i.strip()]
+
 
 # ---------------- ROUTES ----------------
 @app.route("/")
@@ -156,6 +146,7 @@ def logout():
     return redirect(url_for("index"))
 
 
+# ---------------- DASHBOARD ----------------
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -163,13 +154,10 @@ def dashboard():
         user_id=current_user.id
     ).order_by(Analysis.created_at.desc()).limit(5).all()
 
-    return render_template(
-        "dashboard.html",
-        analyses=analyses,
-        total_analyses=len(analyses)
-    )
+    return render_template("dashboard.html", analyses=analyses)
 
 
+# ---------------- HISTORY ----------------
 @app.route("/history")
 @login_required
 def history():
@@ -180,35 +168,25 @@ def history():
     return render_template("history.html", analyses=analyses)
 
 
+# ---------------- PROFILE ----------------
 @app.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     if request.method == "POST":
         current_user.age = request.form.get("age", type=int)
         current_user.gender = request.form.get("gender")
-
-        current_user.dietary_preferences = json.dumps(
-            request.form.getlist("dietary_preferences")
-        )
-
+        current_user.dietary_preferences = json.dumps(request.form.getlist("dietary_preferences"))
         current_user.allergies = json.dumps(
             [a.strip().lower() for a in request.form.get("allergies", "").split(",") if a.strip()]
         )
-
         current_user.medical_conditions = json.dumps(
             [m.strip().lower() for m in request.form.get("medical_conditions", "").split(",") if m.strip()]
         )
-
         db.session.commit()
         flash("Profile updated successfully", "success")
         return redirect(url_for("profile"))
 
-    return render_template(
-        "profile.html",
-        dietary_prefs=json.loads(current_user.dietary_preferences or "[]"),
-        allergies=", ".join(json.loads(current_user.allergies or "[]")),
-        medical_conditions=", ".join(json.loads(current_user.medical_conditions or "[]"))
-    )
+    return render_template("profile.html")
 
 
 # ---------------- ANALYZE (RULE-BASED ONLY) ----------------
@@ -255,6 +233,7 @@ def analyze():
     return render_template("analyze.html")
 
 
+# ---------------- RESULT ----------------
 @app.route("/result/<int:analysis_id>")
 @login_required
 def result(analysis_id):
@@ -263,6 +242,8 @@ def result(analysis_id):
     return render_template("result.html", analysis=analysis, data=data)
 
 
-# ---------------- MAIN (LOCAL ONLY) ----------------
+# ---------------- START ----------------
 if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
