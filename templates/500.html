@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error - NutriGuard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center py-5">
+            <i class="bi bi-exclamation-octagon text-danger" style="font-size: 6rem;"></i>
+            <h1 class="display-1 fw-bold mt-4">500</h1>
+            <h2 class="mb-3">Internal Server Error</h2>
+            <p class="lead text-muted mb-4">
+                Something went wrong on our end. We're working to fix it!
+            </p>
+            <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    <i class="bi bi-house"></i> Go Home
+                </a>
+                <button onclick="history.back()" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Go Back
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

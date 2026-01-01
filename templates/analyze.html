@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Analyze - NutriGuard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-10 mx-auto">
+
+            <h1 class="mb-4">
+                <i class="bi bi-search text-primary"></i> Analyze Ingredients
+            </h1>
+
+            <p class="lead mb-4">
+                Upload an ingredient label or enter ingredients manually.
+                Analysis is performed using a rule-based health engine.
+            </p>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+
+                    <form method="POST"
+                          action="{{ url_for('analyze') }}"
+                          enctype="multipart/form-data"
+                          id="analyzeForm">
+
+                        <div class="mb-4">
+                            <label class="form-label">Product Name (Optional)</label>
+                            <input type="text" class="form-control"
+                                   name="product_name"
+                                   placeholder="e.g., Soft Drink">
+                        </div>
+
+                        <input type="hidden" name="input_method" id="input_method" value="image">
+
+                        <ul class="nav nav-tabs mb-4">
+                            <li class="nav-item">
+                                <button class="nav-link active" id="image-tab" type="button">
+                                    <i class="bi bi-camera"></i> Upload Image
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" id="text-tab" type="button">
+                                    <i class="bi bi-keyboard"></i> Enter Text
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div id="image-input">
+                            <input type="file" class="form-control"
+                                   name="image" id="image"
+                                   accept="image/*"
+                                   onchange="previewImage(event)">
+                            <div id="imagePreview" style="display:none">
+                                <img id="preview" class="img-fluid mt-3 rounded">
+                            </div>
+                        </div>
+
+                        <div id="text-input" style="display:none">
+                            <textarea class="form-control mt-3"
+                                      name="ingredients_text"
+                                      id="ingredients_text"
+                                      rows="6"
+                                      placeholder="Sugar, Salt, Palm Oil"></textarea>
+                        </div>
+
+                        <!-- RULE-BASED NOTICE -->
+                        <div class="alert alert-secondary mt-4">
+                            <i class="bi bi-shield-check"></i>
+                            <strong>Analysis Engine:</strong> Rule-based only (No AI)
+                        </div>
+
+                        <div class="d-grid mt-4">
+                            <button type="submit"
+                                    class="btn btn-primary btn-lg"
+                                    id="submitBtn">
+                                <i class="bi bi-search"></i> Analyze Ingredients
+                            </button>
+                        </div>
+
+                        <div id="loadingIndicator" class="text-center mt-3" style="display:none">
+                            <div class="spinner-border text-primary"></div>
+                            <p class="text-muted mt-2">Analyzing ingredients…</p>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* IMAGE PREVIEW */
+function previewImage(event) {
+    const reader = new FileReader();
+    reader.onload = () => {
+        document.getElementById("preview").src = reader.result;
+        document.getElementById("imagePreview").style.display = "block";
+    };
+    reader.readAsDataURL(event.target.files[0]);
+}
+
+/* TAB SWITCHING */
+const imageTab = document.getElementById("image-tab");
+const textTab = document.getElementById("text-tab");
+const imageInput = document.getElementById("image-input");
+const textInput = document.getElementById("text-input");
+const inputMethod = document.getElementById("input_method");
+
+imageTab.addEventListener("click", () => {
+    inputMethod.value = "image";
+    imageInput.style.display = "block";
+    textInput.style.display = "none";
+    imageTab.classList.add("active");
+    textTab.classList.remove("active");
+});
+
+textTab.addEventListener("click", () => {
+    inputMethod.value = "text";
+    imageInput.style.display = "none";
+    textInput.style.display = "block";
+    textTab.classList.add("active");
+    imageTab.classList.remove("active");
+});
+
+/* FORM VALIDATION + LOADING */
+document.getElementById("analyzeForm").addEventListener("submit", function (e) {
+    if (inputMethod.value === "image") {
+        if (!document.getElementById("image").files.length) {
+            e.preventDefault();
+            alert("Please upload an image.");
+            return;
+        }
+    } else {
+        if (!document.getElementById("ingredients_text").value.trim()) {
+            e.preventDefault();
+            alert("Please enter ingredients.");
+            return;
+        }
+    }
+
+    document.getElementById("submitBtn").disabled = true;
+    document.getElementById("loadingIndicator").style.display = "block";
+});
+</script>
+{% endblock %}

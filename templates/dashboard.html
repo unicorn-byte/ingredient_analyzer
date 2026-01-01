@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - NutriGuard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Dashboard</h1>
+    <p class="lead">Welcome back, {{ current_user.username }}!</p>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h6>Total Analyses</h6>
+                    <h2>{{ total_analyses }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6>Profile Status</h6>
+                    <h5>{{ "Complete" if profile_complete else "Incomplete" }}</h5>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h6>Member Since</h6>
+                    <h6>
+                        {% if current_user.created_at %}
+                            {{ current_user.created_at.strftime('%b %Y') }}
+                        {% else %}
+                            Recently joined
+                        {% endif %}
+                    </h6>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h3>Recent Analyses</h3>
+
+    {% if analyses %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Score</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in analyses %}
+            <tr>
+                <td>{{ a.product_name }}</td>
+                <td>{{ a.safety_score }}</td>
+                <td>{{ a.traffic_light }}</td>
+                <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <a href="{{ url_for('result', analysis_id=a.id) }}"
+                       class="btn btn-sm btn-outline-primary">
+                        View
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <div class="alert alert-info">
+            No analyses yet.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
