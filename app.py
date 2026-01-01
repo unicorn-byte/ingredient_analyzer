@@ -12,6 +12,9 @@ from werkzeug.utils import secure_filename
 
 import os, json, re
 from datetime import datetime
+from dotenv import load_dotenv
+
+# ---------------- OCR (SAFE IMPORT) ----------------
 try:
     import cv2
     import pytesseract
@@ -19,21 +22,21 @@ try:
 except Exception:
     OCR_AVAILABLE = False
 
-from dotenv import load_dotenv
-
-# ✅ RULE ENGINE
+# ---------------- RULE ENGINE ----------------
 from rule_based_analyzer import analyze_ingredients
-
 
 # ---------------- CONFIG ----------------
 load_dotenv()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///nutriguard.db"
+
+# ✅ REQUIRED FOR RENDER (SQLite path)
+os.makedirs("instance", exist_ok=True)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/nutriguard.db"
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = "static/uploads"
-
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 db = SQLAlchemy(app)
@@ -42,17 +45,17 @@ bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
+# ✅ REQUIRED FOR RENDER (Limiter memory storage)
 limiter = Limiter(
     key_func=get_remote_address,
+    storage_uri="memory://",
     default_limits=["200 per day", "50 per hour"]
 )
 limiter.init_app(app)
 
-# ⚠ Adjust if Tesseract path differs
-if os.name == "nt":
+# ✅ Windows-only Tesseract path
+if os.name == "nt" and OCR_AVAILABLE:
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-
 
 # ---------------- MODELS ----------------
 class User(UserMixin, db.Model):
@@ -89,21 +92,27 @@ class Analysis(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# ---------------- DB INIT (RENDER SAFE) ----------------
+with app.app_context():
+    db.create_all()
 
 # ---------------- HELPERS ----------------
 def extract_text_from_image(path):
     if not OCR_AVAILABLE:
         return ""
-    img = cv2.imread(path)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    return pytesseract.image_to_string(gray)
-
+    try:
+        img = cv2.imread(path)
+        if img is None:
+            return ""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        return pytesseract.image_to_string(gray)
+    except Exception:
+        return ""
 
 
 def clean_ingredients(text):
     text = re.sub(r"[^\w\s,]", "", text)
     return [i.strip() for i in text.split(",") if i.strip()]
-
 
 # ---------------- ROUTES ----------------
 @app.route("/")
@@ -147,7 +156,6 @@ def logout():
     return redirect(url_for("index"))
 
 
-# ---------------- DASHBOARD ----------------
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -162,7 +170,6 @@ def dashboard():
     )
 
 
-# ---------------- HISTORY ----------------
 @app.route("/history")
 @login_required
 def history():
@@ -173,7 +180,6 @@ def history():
     return render_template("history.html", analyses=analyses)
 
 
-# ---------------- PROFILE ----------------
 @app.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
@@ -228,7 +234,6 @@ def analyze():
 
         ingredients = clean_ingredients(ingredients_text)
 
-        # ✅ RULE-BASED ANALYSIS
         result = analyze_ingredients(ingredients)
         result["ingredients"] = ingredients
 
@@ -250,7 +255,6 @@ def analyze():
     return render_template("analyze.html")
 
 
-# ---------------- RESULT ----------------
 @app.route("/result/<int:analysis_id>")
 @login_required
 def result(analysis_id):
@@ -259,8 +263,6 @@ def result(analysis_id):
     return render_template("result.html", analysis=analysis, data=data)
 
 
-# ---------------- MAIN ----------------
+# ---------------- MAIN (LOCAL ONLY) ----------------
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
     app.run(debug=True)
