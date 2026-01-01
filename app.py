@@ -12,7 +12,13 @@ from werkzeug.utils import secure_filename
 
 import os, json, re
 from datetime import datetime
-import cv2, pytesseract
+try:
+    import cv2
+    import pytesseract
+    OCR_AVAILABLE = True
+except Exception:
+    OCR_AVAILABLE = False
+
 from dotenv import load_dotenv
 
 # ✅ RULE ENGINE
