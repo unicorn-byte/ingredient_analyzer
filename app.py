@@ -8,7 +8,6 @@ from flask_login import (
 from flask_bcrypt import Bcrypt
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from werkzeug.utils import secure_filename
 
 import os, json, re
 from datetime import datetime
@@ -71,9 +70,9 @@ class Analysis(db.Model):
 
     safety_score = db.Column(db.Integer)
     traffic_light = db.Column(db.String(20))
-
     analysis_result = db.Column(db.Text)
     input_method = db.Column(db.String(20))
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -84,7 +83,7 @@ def load_user(user_id):
 
 # ---------------- HELPERS ----------------
 def extract_text_from_image(_path):
-    # OCR disabled on production (Render safe)
+    # OCR disabled safely for Render
     return ""
 
 
@@ -155,6 +154,7 @@ def history():
     return render_template("history.html", analyses=analyses)
 
 
+# ---------------- PROFILE (✅ FIXED) ----------------
 @app.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
@@ -178,7 +178,17 @@ def profile():
         flash("Profile updated successfully", "success")
         return redirect(url_for("profile"))
 
-    return render_template("profile.html")
+    # ✅ THIS WAS MISSING BEFORE
+    dietary_prefs = json.loads(current_user.dietary_preferences or "[]")
+    allergies = ", ".join(json.loads(current_user.allergies or "[]"))
+    medical_conditions = ", ".join(json.loads(current_user.medical_conditions or "[]"))
+
+    return render_template(
+        "profile.html",
+        dietary_prefs=dietary_prefs,
+        allergies=allergies,
+        medical_conditions=medical_conditions
+    )
 
 
 @app.route("/analyze", methods=["GET", "POST"])
@@ -186,17 +196,7 @@ def profile():
 @limiter.limit("10 per minute")
 def analyze():
     if request.method == "POST":
-        input_method = request.form.get("input_method", "text")
-
-        if input_method == "image":
-            file = request.files.get("image")
-            if not file:
-                flash("Please upload an image", "danger")
-                return redirect(url_for("analyze"))
-            ingredients_text = ""
-        else:
-            ingredients_text = request.form.get("ingredients_text", "")
-
+        ingredients_text = request.form.get("ingredients_text", "")
         ingredients = clean_ingredients(ingredients_text)
 
         result = analyze_ingredients(ingredients)
@@ -209,7 +209,7 @@ def analyze():
             safety_score=result["safety_score"],
             traffic_light=result["traffic_light"],
             analysis_result=json.dumps(result),
-            input_method=input_method
+            input_method="text"
         )
 
         db.session.add(analysis)
