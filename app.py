@@ -137,11 +137,29 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    analyses = Analysis.query.filter_by(
+    total_analyses = Analysis.query.filter_by(
+        user_id=current_user.id
+    ).count()
+
+    recent_analyses = Analysis.query.filter_by(
         user_id=current_user.id
     ).order_by(Analysis.created_at.desc()).limit(5).all()
 
-    return render_template("dashboard.html", analyses=analyses)
+    profile_complete = all([
+        current_user.age,
+        current_user.gender,
+        json.loads(current_user.dietary_preferences or "[]"),
+        json.loads(current_user.allergies or "[]"),
+        json.loads(current_user.medical_conditions or "[]")
+    ])
+
+    return render_template(
+        "dashboard.html",
+        analyses=recent_analyses,
+        total_analyses=total_analyses,
+        profile_complete=profile_complete
+    )
+
 
 
 @app.route("/history")
