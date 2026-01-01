@@ -14,15 +14,7 @@ import os, json, re
 from datetime import datetime
 from dotenv import load_dotenv
 
-# ---------------- OPTIONAL OCR (SAFE) ----------------
-try:
-    import cv2
-    import pytesseract
-    OCR_AVAILABLE = True
-except Exception:
-    OCR_AVAILABLE = False
-
-# ---------------- RULE ENGINE ----------------
+# ✅ RULE ENGINE
 from rule_based_analyzer import analyze_ingredients
 
 # ---------------- CONFIG ----------------
@@ -49,6 +41,7 @@ login_manager.login_view = "login"
 
 limiter = Limiter(
     key_func=get_remote_address,
+    storage_uri="memory://",
     default_limits=["200 per day", "50 per hour"]
 )
 limiter.init_app(app)
@@ -62,6 +55,7 @@ class User(UserMixin, db.Model):
 
     age = db.Column(db.Integer)
     gender = db.Column(db.String(20))
+
     dietary_preferences = db.Column(db.Text, default="[]")
     allergies = db.Column(db.Text, default="[]")
     medical_conditions = db.Column(db.Text, default="[]")
@@ -77,8 +71,8 @@ class Analysis(db.Model):
 
     safety_score = db.Column(db.Integer)
     traffic_light = db.Column(db.String(20))
-    analysis_result = db.Column(db.Text)
 
+    analysis_result = db.Column(db.Text)
     input_method = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -89,14 +83,9 @@ def load_user(user_id):
 
 
 # ---------------- HELPERS ----------------
-def extract_text_from_image(path):
-    if not OCR_AVAILABLE:
-        return ""
-    img = cv2.imread(path)
-    if img is None:
-        return ""
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    return pytesseract.image_to_string(gray)
+def extract_text_from_image(_path):
+    # OCR disabled on production (Render safe)
+    return ""
 
 
 def clean_ingredients(text):
@@ -146,7 +135,6 @@ def logout():
     return redirect(url_for("index"))
 
 
-# ---------------- DASHBOARD ----------------
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -157,7 +145,6 @@ def dashboard():
     return render_template("dashboard.html", analyses=analyses)
 
 
-# ---------------- HISTORY ----------------
 @app.route("/history")
 @login_required
 def history():
@@ -168,20 +155,25 @@ def history():
     return render_template("history.html", analyses=analyses)
 
 
-# ---------------- PROFILE ----------------
 @app.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     if request.method == "POST":
         current_user.age = request.form.get("age", type=int)
         current_user.gender = request.form.get("gender")
-        current_user.dietary_preferences = json.dumps(request.form.getlist("dietary_preferences"))
+
+        current_user.dietary_preferences = json.dumps(
+            request.form.getlist("dietary_preferences")
+        )
+
         current_user.allergies = json.dumps(
             [a.strip().lower() for a in request.form.get("allergies", "").split(",") if a.strip()]
         )
+
         current_user.medical_conditions = json.dumps(
             [m.strip().lower() for m in request.form.get("medical_conditions", "").split(",") if m.strip()]
         )
+
         db.session.commit()
         flash("Profile updated successfully", "success")
         return redirect(url_for("profile"))
@@ -189,7 +181,6 @@ def profile():
     return render_template("profile.html")
 
 
-# ---------------- ANALYZE (RULE-BASED ONLY) ----------------
 @app.route("/analyze", methods=["GET", "POST"])
 @login_required
 @limiter.limit("10 per minute")
@@ -202,11 +193,7 @@ def analyze():
             if not file:
                 flash("Please upload an image", "danger")
                 return redirect(url_for("analyze"))
-
-            filename = secure_filename(file.filename)
-            path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-            file.save(path)
-            ingredients_text = extract_text_from_image(path)
+            ingredients_text = ""
         else:
             ingredients_text = request.form.get("ingredients_text", "")
 
@@ -233,7 +220,6 @@ def analyze():
     return render_template("analyze.html")
 
 
-# ---------------- RESULT ----------------
 @app.route("/result/<int:analysis_id>")
 @login_required
 def result(analysis_id):
@@ -242,8 +228,10 @@ def result(analysis_id):
     return render_template("result.html", analysis=analysis, data=data)
 
 
-# ---------------- START ----------------
+# ---------------- INIT DB ----------------
+with app.app_context():
+    db.create_all()
+
+
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
     app.run(debug=True)
