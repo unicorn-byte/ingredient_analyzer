@@ -92,9 +92,12 @@ def load_user(user_id):
 
 # ---------------- HELPERS ----------------
 def extract_text_from_image(path):
+    if not OCR_AVAILABLE:
+        return ""
     img = cv2.imread(path)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     return pytesseract.image_to_string(gray)
+
 
 
 def clean_ingredients(text):
